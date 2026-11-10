@@ -23,6 +23,7 @@
 #include "UObject/ConstructorHelpers.h"
 #include "InputCoreTypes.h"
 #include "DrawDebugHelpers.h"
+#include "EngineUtils.h"
 
 AUNREALITY_SERVICESCharacter::AUNREALITY_SERVICESCharacter()
 {
@@ -302,6 +303,13 @@ void AUNREALITY_SERVICESCharacter::PushTarget()
 void AUNREALITY_SERVICESCharacter::SpawnTestBlocks()
 {
     if (!GetWorld())
+    {
+        return;
+    }
+
+    // Dedicated authored levels contain their own configured block actors.
+    // Avoid spawning a second pair on top of them.
+    for (TActorIterator<ARealityMassBlock> It(GetWorld()); It; ++It)
     {
         return;
     }
