@@ -22,6 +22,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "UObject/ConstructorHelpers.h"
 #include "InputCoreTypes.h"
+#include "DrawDebugHelpers.h"
 
 AUNREALITY_SERVICESCharacter::AUNREALITY_SERVICESCharacter()
 {
@@ -233,6 +234,10 @@ void AUNREALITY_SERVICESCharacter::ExtractMass()
     if (RealityExtractor->ExtractMassFromView())
     {
         ToolPulse = 1.f;
+        FVector Origin; FRotator Facing;
+        GetController()->GetPlayerViewPoint(Origin, Facing);
+        DrawDebugLine(GetWorld(), Origin, Origin + Facing.Vector() * 430.f,
+            FColor(25, 220, 245), false, 0.26f, 0, 6.0f);
         ShowStatus(TEXT("MASS CAPTURED +5 KG"));
     }
     else
@@ -251,6 +256,10 @@ void AUNREALITY_SERVICESCharacter::RouteMass()
     if (RealityExtractor->ApplyMassToView())
     {
         ToolPulse = 1.f;
+        FVector Origin; FRotator Facing;
+        GetController()->GetPlayerViewPoint(Origin, Facing);
+        DrawDebugLine(GetWorld(), Origin, Origin + Facing.Vector() * 430.f,
+            FColor(255, 165, 50), false, 0.26f, 0, 6.0f);
         ExperienceXP = FMath::Min(100, ExperienceXP + 25);
         ShowStatus(TEXT("MASS ROUTED / +25 XP"));
     }
