@@ -1,0 +1,31 @@
+# Unreal Engine generated files
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+.vs/
+.vscode/
+.idea/
+*.sln
+*.suo
+*.VC.db
+*.VC.opendb
+*.opensdf
+*.sdf
+*.slnx
+*.xcodeproj
+*.xcworkspace
+*.code-workspace
+*.tmp
+*.log
+*.pdb
+*.obj
+*.ipch
+
+# Local/editor settings and operating-system files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Keep source, project descriptor, config, plugins, and game content tracked.
+# Never ignore Content/, Config/, Source/ or *.uproject.
