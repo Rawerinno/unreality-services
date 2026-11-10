@@ -6,6 +6,7 @@
 #include "UNREALITY_SERVICESCharacter.h"
 #include "RealityProperties/PropertyExtractorComponent.h"
 #include "RealityProperties/RealityPropertyComponent.h"
+#include "Prototype/RealityMassBlock.h"
 
 void ARealityPrototypeHUD::Label(const FString& Value, float X, float Y, const FLinearColor& Color, float Scale)
 {
@@ -58,7 +59,8 @@ void ARealityPrototypeHUD::DrawHUD()
     {
         if (const URealityPropertyComponent* Target = Extractor->GetTargetPropertyComponent())
         {
-            const FString TargetName = GetNameSafe(Target->GetOwner());
+            const ARealityMassBlock* Block = Cast<ARealityMassBlock>(Target->GetOwner());
+            const FString TargetName = Block ? Block->BlockLabel.ToString() : GetNameSafe(Target->GetOwner());
             Label(FString::Printf(TEXT("%s | %.1f KG"), *TargetName, Target->CurrentMassKg),
                 CX - 105, CY + 27, Cyan, 1.0f);
         }
