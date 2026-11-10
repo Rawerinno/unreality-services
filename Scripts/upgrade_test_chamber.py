@@ -181,8 +181,8 @@ if a is None:
     a = actors.spawn_actor_from_class(unreal.DirectionalLight,
         unreal.Vector(0, 0, 600), unreal.Rotator(-67, -35, 0))
     a.set_actor_label("US_MasterFill")
-a.light_component.set_editor_property("intensity", 3.5)
-a.light_component.set_editor_property("cast_shadows", False)
+a.directional_light_component.set_editor_property("intensity", 3.5)
+a.directional_light_component.set_editor_property("cast_shadows", False)
 
 # Give the two test bodies a recognizable identity without touching physical properties.
 for name, mat in (("BODY_A", "M_Cyan"), ("BODY_B", "M_Orange")):
