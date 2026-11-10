@@ -10,6 +10,8 @@
 class UInputComponent;
 class USkeletalMeshComponent;
 class UCameraComponent;
+class UStaticMeshComponent;
+class UPropertyExtractorComponent;
 class UInputAction;
 struct FInputActionValue;
 
@@ -50,7 +52,62 @@ protected:
 	class UInputAction* MouseLookAction;
 	
 public:
-	AUNREALITY_SERVICESCharacter();
+    AUNREALITY_SERVICESCharacter();
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Reality|Extractor")
+    TObjectPtr<UPropertyExtractorComponent> RealityExtractor;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Reality|Tool")
+    TObjectPtr<UStaticMeshComponent> ToolBody;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Reality|Tool")
+    TObjectPtr<UStaticMeshComponent> ToolBarrel;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Reality|Tool")
+    TObjectPtr<UStaticMeshComponent> ToolGrip;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Reality|Profile")
+    FString TechnicianName = TEXT("TECH-001");
+
+    UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Reality|Profile")
+    int32 ExperienceXP = 0;
+
+    UPROPERTY(BlueprintReadOnly, Category="Reality|UI")
+    FString StatusMessage;
+
+    UPROPERTY(BlueprintReadOnly, Category="Reality|UI")
+    float StatusUntilTime = 0.0f;
+
+    UPROPERTY(BlueprintReadOnly, Category="Reality|UI")
+    bool bGraphicsMenuOpen = false;
+
+    UPropertyExtractorComponent* GetRealityExtractor() const { return RealityExtractor; }
+    FString GetGraphicsDescription() const;
+
+protected:
+    virtual void BeginPlay() override;
+    virtual void Tick(float DeltaSeconds) override;
+
+private:
+    void ExtractMass();
+    void RouteMass();
+    void PushTarget();
+    void ToggleGraphicsMenu();
+    void SetQualityLow();
+    void SetQualityMedium();
+    void SetQualityHigh();
+    void SetQualityEpic();
+    void RenderScaleDown();
+    void RenderScaleUp();
+    void ToggleVSync();
+    void ApplyQuality(int32 Quality);
+    void ChangeRenderScale(float Delta);
+    void ShowStatus(const FString& Message);
+    void SpawnTestBlocks();
+
+    float ToolPulse = 0.0f;
+    bool bPrototypeInitialized = false;
+    float RenderScalePercent = 80.0f;
 
 protected:
 

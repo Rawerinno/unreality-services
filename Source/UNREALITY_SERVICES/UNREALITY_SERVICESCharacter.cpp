@@ -9,6 +9,20 @@
 #include "InputActionValue.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "UNREALITY_SERVICES.h"
+#include "RealityProperties/PropertyExtractorComponent.h"
+#include "RealityProperties/RealityPropertyComponent.h"
+#include "Prototype/RealityMassBlock.h"
+#include "Prototype/RealityPrototypeHUD.h"
+#include "Components/StaticMeshComponent.h"
+#include "Components/PrimitiveComponent.h"
+#include "Engine/Engine.h"
+#include "Engine/World.h"
+#include "GameFramework/PlayerController.h"
+#include "GameFramework/GameUserSettings.h"
+#include "Kismet/GameplayStatics.h"
+#include "UObject/ConstructorHelpers.h"
+#include "InputCoreTypes.h"
+#include "DrawDebugHelpers.h"
 
 AUNREALITY_SERVICESCharacter::AUNREALITY_SERVICESCharacter()
 {
@@ -41,12 +55,57 @@ AUNREALITY_SERVICESCharacter::AUNREALITY_SERVICESCharacter()
 
 	// Configure character movement
 	GetCharacterMovement()->BrakingDecelerationFalling = 1500.0f;
-	GetCharacterMovement()->AirControl = 0.5f;
+    GetCharacterMovement()->AirControl = 0.5f;
+
+    PrimaryActorTick.bCanEverTick = true;
+    RealityExtractor = CreateDefaultSubobject<UPropertyExtractorComponent>(TEXT("PropertyExtractor"));
+
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
+    ToolBody = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ExtractorHousing"));
+    ToolBody->SetupAttachment(FirstPersonCameraComponent);
+    ToolBody->SetOnlyOwnerSee(true);
+    ToolBody->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    ToolBody->SetRelativeLocation(FVector(42.f, 21.f, -24.f));
+    ToolBody->SetRelativeScale3D(FVector(0.33f, 0.11f, 0.11f));
+
+    ToolBarrel = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ExtractorBarrel"));
+    ToolBarrel->SetupAttachment(ToolBody);
+    ToolBarrel->SetOnlyOwnerSee(true);
+    ToolBarrel->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    ToolBarrel->SetRelativeLocation(FVector(56.f, 0.f, 10.f));
+    ToolBarrel->SetRelativeScale3D(FVector(0.60f, 0.55f, 0.55f));
+
+    ToolGrip = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ExtractorGrip"));
+    ToolGrip->SetupAttachment(ToolBody);
+    ToolGrip->SetOnlyOwnerSee(true);
+    ToolGrip->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    ToolGrip->SetRelativeLocation(FVector(-24.f, 4.f, -66.f));
+    ToolGrip->SetRelativeScale3D(FVector(0.27f, 0.55f, 0.95f));
+
+    if (CubeMesh.Succeeded())
+    {
+        ToolBody->SetStaticMesh(CubeMesh.Object);
+        ToolBarrel->SetStaticMesh(CubeMesh.Object);
+        ToolGrip->SetStaticMesh(CubeMesh.Object);
+    }
 }
 
 void AUNREALITY_SERVICESCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {	
-	// Set up action bindings
+    // Prototype keyboard controls are bound without changing the template's .uasset mappings.
+    PlayerInputComponent->BindKey(EKeys::E, IE_Pressed, this, &AUNREALITY_SERVICESCharacter::ExtractMass);
+    PlayerInputComponent->BindKey(EKeys::R, IE_Pressed, this, &AUNREALITY_SERVICESCharacter::RouteMass);
+    PlayerInputComponent->BindKey(EKeys::F, IE_Pressed, this, &AUNREALITY_SERVICESCharacter::PushTarget);
+    PlayerInputComponent->BindKey(EKeys::F1, IE_Pressed, this, &AUNREALITY_SERVICESCharacter::ToggleGraphicsMenu);
+    PlayerInputComponent->BindKey(EKeys::One, IE_Pressed, this, &AUNREALITY_SERVICESCharacter::SetQualityLow);
+    PlayerInputComponent->BindKey(EKeys::Two, IE_Pressed, this, &AUNREALITY_SERVICESCharacter::SetQualityMedium);
+    PlayerInputComponent->BindKey(EKeys::Three, IE_Pressed, this, &AUNREALITY_SERVICESCharacter::SetQualityHigh);
+    PlayerInputComponent->BindKey(EKeys::Four, IE_Pressed, this, &AUNREALITY_SERVICESCharacter::SetQualityEpic);
+    PlayerInputComponent->BindKey(EKeys::LeftBracket, IE_Pressed, this, &AUNREALITY_SERVICESCharacter::RenderScaleDown);
+    PlayerInputComponent->BindKey(EKeys::RightBracket, IE_Pressed, this, &AUNREALITY_SERVICESCharacter::RenderScaleUp);
+    PlayerInputComponent->BindKey(EKeys::V, IE_Pressed, this, &AUNREALITY_SERVICESCharacter::ToggleVSync);
+
+    // Set up action bindings
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent))
 	{
 		// Jumping
@@ -117,4 +176,228 @@ void AUNREALITY_SERVICESCharacter::DoJumpEnd()
 {
 	// pass StopJumping to the character
 	StopJumping();
+}
+
+
+void AUNREALITY_SERVICESCharacter::BeginPlay()
+{
+    Super::BeginPlay();
+    if (IsLocallyControlled())
+    {
+        SpawnTestBlocks();
+        ShowStatus(TEXT("TRANSFER MASS: E EXTRACT / R ROUTE / F PUSH"));
+    }
+}
+
+void AUNREALITY_SERVICESCharacter::Tick(float DeltaSeconds)
+{
+    Super::Tick(DeltaSeconds);
+
+    if (!IsLocallyControlled())
+    {
+        return;
+    }
+
+    if (!bPrototypeInitialized)
+    {
+        if (APlayerController* PC = Cast<APlayerController>(GetController()))
+        {
+            bPrototypeInitialized = true;
+            if (!Cast<ARealityPrototypeHUD>(PC->GetHUD()))
+            {
+                PC->ClientSetHUD(ARealityPrototypeHUD::StaticClass());
+            }
+        }
+    }
+
+    ToolPulse = FMath::Max(0.f, ToolPulse - DeltaSeconds * 3.3f);
+    if (ToolBody)
+    {
+        const float Recoil = FMath::Sin(ToolPulse * PI) * 6.0f;
+        ToolBody->SetRelativeLocation(FVector(42.f - Recoil, 21.f, -24.f + Recoil * 0.4f));
+    }
+}
+
+void AUNREALITY_SERVICESCharacter::ShowStatus(const FString& Message)
+{
+    StatusMessage = Message;
+    StatusUntilTime = GetWorld() ? GetWorld()->GetTimeSeconds() + 2.5f : 0.f;
+}
+
+void AUNREALITY_SERVICESCharacter::ExtractMass()
+{
+    if (bGraphicsMenuOpen || !RealityExtractor)
+    {
+        return;
+    }
+
+    if (RealityExtractor->ExtractMassFromView())
+    {
+        ToolPulse = 1.f;
+        FVector Origin; FRotator Facing;
+        GetController()->GetPlayerViewPoint(Origin, Facing);
+        DrawDebugLine(GetWorld(), Origin, Origin + Facing.Vector() * 430.f,
+            FColor(25, 220, 245), false, 0.26f, 0, 6.0f);
+        ShowStatus(TEXT("MASS CAPTURED +5 KG"));
+    }
+    else
+    {
+        ShowStatus(TEXT("EXTRACTION FAILED / CHECK TARGET"));
+    }
+}
+
+void AUNREALITY_SERVICESCharacter::RouteMass()
+{
+    if (bGraphicsMenuOpen || !RealityExtractor)
+    {
+        return;
+    }
+
+    if (RealityExtractor->ApplyMassToView())
+    {
+        ToolPulse = 1.f;
+        FVector Origin; FRotator Facing;
+        GetController()->GetPlayerViewPoint(Origin, Facing);
+        DrawDebugLine(GetWorld(), Origin, Origin + Facing.Vector() * 430.f,
+            FColor(255, 165, 50), false, 0.26f, 0, 6.0f);
+        ExperienceXP = FMath::Min(100, ExperienceXP + 25);
+        ShowStatus(TEXT("MASS ROUTED / +25 XP"));
+    }
+    else
+    {
+        ShowStatus(TEXT("ROUTING FAILED / CHECK DESTINATION"));
+    }
+}
+
+void AUNREALITY_SERVICESCharacter::PushTarget()
+{
+    if (bGraphicsMenuOpen || !GetWorld() || !GetController())
+    {
+        return;
+    }
+
+    FVector ViewOrigin;
+    FRotator ViewRotation;
+    GetController()->GetPlayerViewPoint(ViewOrigin, ViewRotation);
+
+    FCollisionQueryParams Params(SCENE_QUERY_STAT(RealityPush), false);
+    Params.AddIgnoredActor(this);
+    FHitResult Hit;
+    if (GetWorld()->LineTraceSingleByChannel(Hit, ViewOrigin,
+        ViewOrigin + ViewRotation.Vector() * 550.f, ECC_Visibility, Params))
+    {
+        UPrimitiveComponent* Body = Hit.GetComponent();
+        if (IsValid(Body) && Body->IsSimulatingPhysics())
+        {
+            // Fixed impulse, not velocity: heavier blocks accelerate less.
+            Body->AddImpulseAtLocation(ViewRotation.Vector() * 4200.f, Hit.ImpactPoint);
+            ToolPulse = 0.65f;
+            ShowStatus(TEXT("FORCE TEST / IMPULSE APPLIED"));
+            return;
+        }
+    }
+    ShowStatus(TEXT("PUSH TEST / NO PHYSICAL TARGET"));
+}
+
+void AUNREALITY_SERVICESCharacter::SpawnTestBlocks()
+{
+    if (!GetWorld())
+    {
+        return;
+    }
+
+    const FVector Forward = GetActorForwardVector();
+    const FVector Right = GetActorRightVector();
+    const FVector Start = GetActorLocation();
+    const FVector Centers[2] = {
+        Start + Forward * 460.f - Right * 160.f,
+        Start + Forward * 460.f + Right * 160.f
+    };
+
+    for (int32 Index = 0; Index < 2; ++Index)
+    {
+        FVector Position = Centers[Index] + FVector(0.f, 0.f, 90.f);
+        FHitResult GroundHit;
+        FCollisionQueryParams Query(SCENE_QUERY_STAT(RealityBlockPlacement), false);
+        Query.AddIgnoredActor(this);
+        if (GetWorld()->LineTraceSingleByChannel(
+            GroundHit, Centers[Index] + FVector(0,0,500),
+            Centers[Index] - FVector(0,0,1600), ECC_Visibility, Query))
+        {
+            Position.Z = GroundHit.ImpactPoint.Z + 75.f;
+        }
+
+        FTransform SpawnTransform(FRotator::ZeroRotator, Position);
+        ARealityMassBlock* Block = GetWorld()->SpawnActorDeferred<ARealityMassBlock>(
+            ARealityMassBlock::StaticClass(), SpawnTransform, this);
+        if (Block)
+        {
+            Block->InitialMassKg = Index == 0 ? 20.0f : 5.0f;
+            Block->BlockLabel = Index == 0 ? TEXT("BODY A") : TEXT("BODY B");
+            UGameplayStatics::FinishSpawningActor(Block, SpawnTransform);
+        }
+    }
+}
+
+void AUNREALITY_SERVICESCharacter::ToggleGraphicsMenu()
+{
+    bGraphicsMenuOpen = !bGraphicsMenuOpen;
+}
+
+void AUNREALITY_SERVICESCharacter::ApplyQuality(int32 Quality)
+{
+    if (!bGraphicsMenuOpen || !GEngine) return;
+    if (UGameUserSettings* Settings = GEngine->GetGameUserSettings())
+    {
+        Settings->SetOverallScalabilityLevel(Quality);
+        Settings->ApplySettings(false);
+        ShowStatus(TEXT("GRAPHICS PROFILE SAVED"));
+    }
+}
+void AUNREALITY_SERVICESCharacter::SetQualityLow()    { ApplyQuality(0); }
+void AUNREALITY_SERVICESCharacter::SetQualityMedium() { ApplyQuality(1); }
+void AUNREALITY_SERVICESCharacter::SetQualityHigh()   { ApplyQuality(2); }
+void AUNREALITY_SERVICESCharacter::SetQualityEpic()   { ApplyQuality(3); }
+
+void AUNREALITY_SERVICESCharacter::ChangeRenderScale(float Delta)
+{
+    if (!bGraphicsMenuOpen || !GEngine) return;
+    if (UGameUserSettings* Settings = GEngine->GetGameUserSettings())
+    {
+        float Normalized = 0.f, Actual = 100.f, Min = 50.f, Max = 100.f;
+        Settings->GetResolutionScaleInformationEx(Normalized, Actual, Min, Max);
+        RenderScalePercent = FMath::Clamp(Actual + Delta, FMath::Max(50.f, Min), FMath::Min(100.f, Max));
+        Settings->SetResolutionScaleValueEx(RenderScalePercent);
+        Settings->ApplySettings(false);
+    }
+}
+
+void AUNREALITY_SERVICESCharacter::RenderScaleDown() { ChangeRenderScale(-10.f); }
+void AUNREALITY_SERVICESCharacter::RenderScaleUp()   { ChangeRenderScale(10.f); }
+
+void AUNREALITY_SERVICESCharacter::ToggleVSync()
+{
+    if (!bGraphicsMenuOpen || !GEngine) return;
+    if (UGameUserSettings* Settings = GEngine->GetGameUserSettings())
+    {
+        Settings->SetVSyncEnabled(!Settings->IsVSyncEnabled());
+        Settings->ApplySettings(false);
+    }
+}
+
+FString AUNREALITY_SERVICESCharacter::GetGraphicsDescription() const
+{
+    if (!GEngine) return TEXT("GRAPHICS UNAVAILABLE");
+    const UGameUserSettings* Settings = GEngine->GetGameUserSettings();
+    if (!Settings) return TEXT("GRAPHICS UNAVAILABLE");
+    const int32 Quality = Settings->GetOverallScalabilityLevel();
+    const TCHAR* QualityName =
+        Quality == 0 ? TEXT("LOW") :
+        Quality == 1 ? TEXT("MEDIUM") :
+        Quality == 2 ? TEXT("HIGH") :
+        Quality == 3 ? TEXT("EPIC") : TEXT("CUSTOM");
+    float Normalized = 0.f, Actual = 100.f, Min = 50.f, Max = 100.f;
+    Settings->GetResolutionScaleInformationEx(Normalized, Actual, Min, Max);
+    return FString::Printf(TEXT("%s  |  SCALE %.0f%%  |  V-SYNC %s"),
+        QualityName, Actual, Settings->IsVSyncEnabled() ? TEXT("ON") : TEXT("OFF"));
 }
