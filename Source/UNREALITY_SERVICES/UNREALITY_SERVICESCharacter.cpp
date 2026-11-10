@@ -14,6 +14,7 @@
 #include "Prototype/RealityMassBlock.h"
 #include "Prototype/RealityPrototypeHUD.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/PrimitiveComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
@@ -352,9 +353,11 @@ void AUNREALITY_SERVICESCharacter::SetQualityEpic()   { ApplyQuality(3); }
 void AUNREALITY_SERVICESCharacter::ChangeRenderScale(float Delta)
 {
     if (!bGraphicsMenuOpen || !GEngine) return;
-    RenderScalePercent = FMath::Clamp(RenderScalePercent + Delta, 50.f, 100.f);
     if (UGameUserSettings* Settings = GEngine->GetGameUserSettings())
     {
+        float Normalized = 0.f, Actual = 100.f, Min = 50.f, Max = 100.f;
+        Settings->GetResolutionScaleInformationEx(Normalized, Actual, Min, Max);
+        RenderScalePercent = FMath::Clamp(Actual + Delta, FMath::Max(50.f, Min), FMath::Min(100.f, Max));
         Settings->SetResolutionScaleValueEx(RenderScalePercent);
         Settings->ApplySettings(false);
     }
@@ -384,6 +387,8 @@ FString AUNREALITY_SERVICESCharacter::GetGraphicsDescription() const
         Quality == 1 ? TEXT("MEDIUM") :
         Quality == 2 ? TEXT("HIGH") :
         Quality == 3 ? TEXT("EPIC") : TEXT("CUSTOM");
+    float Normalized = 0.f, Actual = 100.f, Min = 50.f, Max = 100.f;
+    Settings->GetResolutionScaleInformationEx(Normalized, Actual, Min, Max);
     return FString::Printf(TEXT("%s  |  SCALE %.0f%%  |  V-SYNC %s"),
-        QualityName, RenderScalePercent, Settings->IsVSyncEnabled() ? TEXT("ON") : TEXT("OFF"));
+        QualityName, Actual, Settings->IsVSyncEnabled() ? TEXT("ON") : TEXT("OFF"));
 }
